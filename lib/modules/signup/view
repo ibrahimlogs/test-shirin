@@ -1,0 +1,329 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import 'package:nittoseiko_health_care/modules/signin/view/signin_view.dart';
+
+import '../../../../core/controller/auth_controller.dart';
+import '../../../core/utils/email_validator.dart';
+import '../../../core/values/app_style.dart';
+import '../../../core/widgets/password_field_widgets.dart';
+import '../../../modules/common/company_directory.dart';
+import '../../../modules/common/company_picker.dart';
+import '../widgets/birthdayr_textfield_widget.dart';
+import '../widgets/gender_dropdown_widget.dart';
+import '../widgets/sign_in_link_button_widget.dart';
+import '../widgets/sign_up_button_widget.dart';
+import '../widgets/sign_up_text_field_widget.dart';
+import '../widgets/signup_email_text_field_widget.dart';
+
+class SignUpView extends StatefulWidget {
+  const SignUpView({super.key});
+
+  @override
+  State<SignUpView> createState() => _SignUpViewState();
+}
+
+class _SignUpViewState extends State<SignUpView> {
+  final TextEditingController _controllerName = TextEditingController();
+  final TextEditingController _controllerNickName = TextEditingController();
+  final TextEditingController _birthdayController = TextEditingController();
+  final TextEditingController _controllerHeight = TextEditingController();
+  final TextEditingController _controllerWeight = TextEditingController();
+  final TextEditingController _controllerStepsGoal = TextEditingController();
+  final TextEditingController _controllerPersonalCode = TextEditingController();
+  final TextEditingController _controllerEmail = TextEditingController();
+  final TextEditingController _controllerPassword = TextEditingController();
+  final TextEditingController _controllerSecurityCode = TextEditingController();
+
+  final _formKey = GlobalKey<FormState>();
+
+  String? _gender;
+  CompanyOption? _selectedCompany;
+  bool _submitting = false;
+  bool _canResend = true;
+
+  Future<void> _showVerifyDialog() async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setStateDialog) {
+            Future<void> resend() async {
+              if (!_canResend) return;
+              setStateDialog(() => _canResend = false);
+              try {
+                await FirebaseAuth.instance.currentUser
+                    ?.sendEmailVerification();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Verification email resent.')),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to resend: $e')),
+                  );
+                }
+              } finally {
+                Future.delayed(const Duration(seconds: 30), () {
+                  if (mounted) setState(() => _canResend = true);
+                  if (ctx.mounted) setStateDialog(() {});
+                });
+              }
+              setStateDialog(() {});
+            }
+
+            Future<void> goToSignIn() async {
+              try {
+                await FirebaseAuth.instance.signOut();
+              } catch (_) {}
+              if (!mounted || !ctx.mounted) return;
+              Navigator.of(ctx).pop();
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const SignInView()),
+              );
+            }
+
+            return AlertDialog(
+              title: const Text('Verify your email'),
+              content: Text(
+                'We have sent a verification link to ${_controllerEmail.text.trim()}.\n'
+                'Please check your inbox and Spam.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _canResend ? resend : null,
+                  child: Text(_canResend ? 'Resend Email' : 'Wait 30s...'),
+                ),
+                ElevatedButton(
+                  onPressed: goToSignIn,
+                  child: const Text('Go to Sign In'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> createwithEmailAndPassword() async {
+    setState(() => _submitting = true);
+    try {
+      await AuthController().createwithEmailAndPassword(
+        name: _controllerName.text.trim(),
+        nickName: _controllerNickName.text.trim(),
+        gender: _gender!,
+        birthday: _birthdayController.text.trim(),
+        height: _controllerHeight.text.trim(),
+        weight: _controllerWeight.text.trim(),
+        stepGoal: _controllerStepsGoal.text.trim(),
+        personalCode: _controllerPersonalCode.text.trim(),
+        email: _controllerEmail.text.trim(),
+        password: _controllerPassword.text,
+        companyId: _selectedCompany!.id,
+        securityCode: _controllerSecurityCode.text.trim(),
+      );
+
+      if (!mounted) return;
+      await _showVerifyDialog();
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      final msg = e.message ?? 'Sign up failed';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Sign up failed: $e')));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controllerName.dispose();
+    _controllerNickName.dispose();
+    _birthdayController.dispose();
+    _controllerHeight.dispose();
+    _controllerWeight.dispose();
+    _controllerStepsGoal.dispose();
+    _controllerPersonalCode.dispose();
+    _controllerEmail.dispose();
+    _controllerPassword.dispose();
+    _controllerSecurityCode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 36.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  height: 200,
+                  child: Image.asset(
+                    'asset/sign-up.png',
+                    height: 200,
+                    width: 200,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SignUpTextFieldWidget(
+                  isNumber: false,
+                  hintText: 'Your Full Name',
+                  controller: _controllerName,
+                ),
+                const SizedBox(height: 12),
+                SignUpTextFieldWidget(
+                  isNumber: false,
+                  hintText: 'Your Nick Name',
+                  controller: _controllerNickName,
+                ),
+                const SizedBox(height: 12),
+                BirthdayPickerTextFieldWidget(
+                  controller: _birthdayController,
+                  hintText: 'Select your birthdate',
+                  hintStyle: othersTextStyleGray,
+                ),
+                const SizedBox(height: 12),
+                GenderDropdownWidget(
+                  selectedGender: _gender,
+                  onChanged: (value) => setState(() => _gender = value),
+                ),
+                const SizedBox(height: 12),
+                SignUpTextFieldWidget(
+                  controller: _controllerHeight,
+                  hintText: 'Height (cm)',
+                  isNumber: true,
+                ),
+                const SizedBox(height: 12),
+                SignUpTextFieldWidget(
+                  controller: _controllerWeight,
+                  hintText: 'Weight (KG)',
+                  isNumber: true,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _controllerStepsGoal,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.next,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    hintText: 'Step Goal',
+                    hintStyle: othersTextStyleGray,
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 14,
+                      horizontal: 12,
+                    ),
+                  ),
+                  validator: (value) {
+                    final raw = (value ?? '').trim();
+                    if (raw.isEmpty) return 'Please enter your step goal';
+                    if (!RegExp(r'^\d+$').hasMatch(raw)) {
+                      return 'Step goal must be an integer';
+                    }
+                    if (raw.length > 1 && raw.startsWith('0')) {
+                      return 'Remove leading zeros';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                CompanyPickerFormField(
+                  initialValue: _selectedCompany,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  labelText: 'Company',
+                  onChanged: (company) {
+                    setState(() => _selectedCompany = company);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _controllerSecurityCode,
+                  keyboardType: TextInputType.visiblePassword,
+                  textInputAction: TextInputAction.next,
+                  textCapitalization: TextCapitalization.none,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: InputDecoration(
+                    labelText: 'Company Security Key',
+                    labelStyle: subTitleTextStyleGray,
+                    hintText: 'Company Security Key',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                  ),
+                  validator: (value) {
+                    if ((value ?? '').trim().isEmpty) {
+                      return 'Company Security Key is required';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                SignUpTextFieldWidget(
+                  controller: _controllerPersonalCode,
+                  hintText: 'Personal Code',
+                  isNumber: false,
+                ),
+                const SizedBox(height: 12),
+                SignUpEmailTextFieldWidget(
+                  controller: _controllerEmail,
+                  validator: validateEmailForSignUp,
+                ),
+                const SizedBox(height: 12),
+                PasswordField(controller: _controllerPassword),
+                const SizedBox(height: 20),
+                SignUpButtonWidget(
+                  isLoading: _submitting,
+                  onPressed: () async {
+                    if (_gender == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select gender')),
+                      );
+                      return;
+                    }
+
+                    if (_selectedCompany == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please select a company'),
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (_formKey.currentState!.validate()) {
+                      await createwithEmailAndPassword();
+                    }
+                  },
+                ),
+                const SizedBox(height: 40),
+                SignInLinkButtonWidget(
+                  onTap: () {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const SignInView()),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
